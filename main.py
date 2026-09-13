@@ -23,9 +23,7 @@ import yaml
 
 from xuanpin import costing, db, report, risk
 from xuanpin.mock import MOCK_ITEMS
-
-ROOT = Path(__file__).resolve().parent
-CONFIG_PATH = ROOT / "config.yaml"
+from xuanpin.paths import CONFIG_PATH, KEYWORDS_PATH
 
 
 def load_cfg():
@@ -127,7 +125,7 @@ def main():
                     help="预估单件重量(克), 采集不到重量时用它估运费")
     sub.add_parser("test", help="用模拟数据跑通报表流程 (不开浏览器)")
     bp = sub.add_parser("batch", help="每日选品工作流: 读候选清单批量采集并汇总")
-    bp.add_argument("--file", default="keywords.txt", help="候选清单文件, 默认keywords.txt")
+    bp.add_argument("--file", default=str(KEYWORDS_PATH), help="候选清单文件, 默认项目根keywords.txt")
     bp.add_argument("--demo", action="store_true", help="演示模式: 用模拟数据, 不开浏览器")
 
     args = ap.parse_args()

@@ -17,7 +17,8 @@ from urllib.parse import quote
 
 from playwright.sync_api import sync_playwright
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+from xuanpin.paths import DATA_DIR
+
 PROFILE_DIR = DATA_DIR / "browser_profile"
 DEBUG_DIR = DATA_DIR / "debug"
 

@@ -22,11 +22,8 @@ from flask import Flask, jsonify, render_template_string, request, send_from_dir
 
 from xuanpin import db
 from xuanpin.batch import parse_keywords_file, run_batch, single_search
+from xuanpin.paths import BASE_DIR, CONFIG_PATH, KEYWORDS_PATH, REPORTS_DIR
 
-ROOT = Path(__file__).resolve().parent
-KEYWORDS_FILE = ROOT / "keywords.txt"
-REPORTS_DIR = ROOT / "reports"
-CONFIG_PATH = ROOT / "config.yaml"
 PORT = 8765
 
 app = Flask(__name__)
@@ -127,14 +124,14 @@ def api_keywords_save():
         if it["weight"]:
             parts.append(str(it["weight"]))
         lines.append(",".join(parts))
-    KEYWORDS_FILE.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    KEYWORDS_PATH.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return jsonify(ok=True, count=len(cleaned))
 
 
 @app.get("/api/keywords")
 def api_keywords_load():
     try:
-        entries = parse_keywords_file(KEYWORDS_FILE)
+        entries = parse_keywords_file(KEYWORDS_PATH)
     except FileNotFoundError:
         return jsonify(items=[])
     return jsonify(items=[{k: e[k] for k in ("keyword", "retail", "weight")}
@@ -160,7 +157,7 @@ def api_batch():
 
     def fn():
         cfg = load_cfg()
-        summary, _ = run_batch(cfg, list_file=str(KEYWORDS_FILE), demo=demo,
+        summary, _ = run_batch(cfg, list_file=str(KEYWORDS_PATH), demo=demo,
                                interactive=False, cancel_check=lambda: JOB["cancel"])
         JOB["summary"] = Path(summary).name
         if JOB["cancel"]:
@@ -604,6 +601,12 @@ if __name__ == "__main__":
     import socket
     import webbrowser
 
+    # 打包成exe(--noconsole)后没有控制台, 把输出转存日志便于排障
+    if getattr(sys, "frozen", False):
+        LOG_DIR = BASE_DIR / "data"
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        sys.stdout = sys.stderr = open(LOG_DIR / "ui.log", "a", encoding="utf-8", buffering=1)
+
     REPORTS_DIR.mkdir(exist_ok=True)
     url = f"http://127.0.0.1:{PORT}"
 
@@ -613,11 +616,37 @@ if __name__ == "__main__":
     s.close()
 
     if port_busy:
-        print(f"界面已经在运行, 直接打开浏览器: {url}")
+        print(f"界面已经在运行, 直接打开: {url}")
         webbrowser.open(url)
         sys.exit(0)
 
-    # 服务真正开始监听后再开浏览器, 避免打开太早报"无法访问"
-    threading.Timer(1.5, lambda: webbrowser.open(url)).start()
-    print(f"选品助手界面: {url}  (保持本窗口开着, 关闭即退出)")
-    app.run(host="127.0.0.1", port=PORT, threaded=True)
+    def server_ready():
+        for _ in range(50):
+            try:
+                c = socket.socket()
+                c.settimeout(0.3)
+                if c.connect_ex(("127.0.0.1", PORT)) == 0:
+                    return True
+            finally:
+                c.close()
+            time.sleep(0.2)
+        return False
+
+    if "--server" in sys.argv:
+        print(f"选品助手界面: {url}  (保持本窗口开着, 关闭即退出)")
+        app.run(host="127.0.0.1", port=PORT, threaded=True)
+    else:
+        # 桌面窗口模式: 内嵌WebView, 关窗即退出; 不可用时回退浏览器
+        threading.Thread(target=lambda: app.run(host="127.0.0.1", port=PORT, threaded=True),
+                         daemon=True).start()
+        if server_ready():
+            try:
+                import webview
+                webview.create_window("选品助手 · xuanpin", url, width=1120, height=920,
+                                      min_size=(900, 700))
+                webview.start()
+                sys.exit(0)
+            except Exception:
+                print("桌面窗口不可用(可能缺WebView2), 改用浏览器模式")
+        webbrowser.open(url)
+        threading.Event().wait()  # 浏览器模式下服务保活

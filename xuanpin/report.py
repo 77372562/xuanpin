@@ -1,12 +1,11 @@
 """Excel 报表输出 (openpyxl)"""
 from datetime import datetime
-from pathlib import Path
 
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
 
-REPORTS_DIR = Path(__file__).resolve().parent.parent / "reports"
+from xuanpin.paths import REPORTS_DIR
 
 HEADERS = ["排名", "商品标题", "商品链接", "批发价低(¥)", "批发价高(¥)", "起订量",
            "销量线索", "重量(g,估)", "落地成本(¥)", "供货价上限(¥)",

@@ -98,6 +98,10 @@ python main.py test
 
 所有成本参数在 `config.yaml` 中可调，建议按你实际货代报价校准后再用。
 
+## 🖥️ 打包成桌面软件（可选）
+
+想脱离 Python 环境当独立软件用：运行 `build_exe.bat`，产物在 `dist\XuanPin\`，把整个文件夹拷到任意位置，双击 `XuanPin.exe` 即打开桌面窗口（数据存 exe 旁边，换电脑整体拷贝即可）。
+
 ## ⚙️ 配置说明
 
 | 配置项 | 说明 | 默认值 |

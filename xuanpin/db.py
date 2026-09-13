@@ -1,8 +1,9 @@
 """SQLite 存储层: 商品、供应商、价格历史、运行记录"""
 import sqlite3
-from pathlib import Path
 
-DB_PATH = Path(__file__).resolve().parent.parent / "data" / "xuanpin.db"
+from xuanpin.paths import DATA_DIR
+
+DB_PATH = DATA_DIR / "xuanpin.db"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS suppliers (
