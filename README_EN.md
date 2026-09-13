@@ -16,6 +16,7 @@ A product-research decision tool for **Temu full-consignment (全托管) sellers
 - ⚠️ **Automatic risk flags** — red warnings when a title hits brand-infringement keywords or regulated categories (toys EN71/CPC, electronics CE/FCC, food-contact FDA, etc.)
 - 📊 **Excel shortlist** — sorted by conservative profit, negative profit in red, clickable product links, run parameters recorded for review
 - 🗄️ **Price history** — every scrape is snapshotted into SQLite; run the same keyword twice to see price trends
+- 📦 **Supply monitoring & delist/restock advice** — register products you already quoted; every workflow run re-checks the latest 1688 prices: cost up → suggest delisting (stop supply), cost down → suggest scaling up, source gone → suggest re-sourcing, with a supply-monitor Excel report
 - 🐞 **Debug-friendly** — on failure it auto-saves screenshot + HTML + raw API payloads, making page-change breakages quick to fix
 
 ## 🔄 Workflow
@@ -137,6 +138,7 @@ xuanpin/
 - [ ] Auto-compare Temu listing prices (replace manual --retail)
 - [x] Batch keyword runs + combined summary sheet (`python main.py batch` / double-click `每日选品.bat`)
 - [x] Local web UI (double-click `选品界面.bat`: browser operation + live logs + report downloads)
+- [x] Supply monitoring + auto delist/restock advice (register supplied products in UI section ⑤)
 - [ ] Scheduled runs + new-product / price-change alerts
 
 ## ⚠️ Disclaimer

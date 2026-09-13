@@ -6,15 +6,20 @@
 """
 
 
-def estimate(purchase_price, weight_g, retail_price, cfg):
+def landed_cost(purchase_price, weight_g, cfg):
+    """落地成本 = 采购价 + 包装 + 国内送仓 (+ 超重附加)"""
     c = cfg["costing"]
-    take = cfg["fees"]["platform_take"]
-
     w = weight_g if weight_g and weight_g > 0 else c["default_weight_g"]
     over = max(0.0, w - c["free_weight_g"])
     surcharge = over / 1000.0 * c["overweight_rate_per_kg"]
+    return purchase_price + c["packaging_fee"] + c["inbound_ship"] + surcharge
 
-    landed = purchase_price + c["packaging_fee"] + c["inbound_ship"] + surcharge
+
+def estimate(purchase_price, weight_g, retail_price, cfg):
+    take = cfg["fees"]["platform_take"]
+
+    w = weight_g if weight_g and weight_g > 0 else cfg["costing"]["default_weight_g"]
+    landed = landed_cost(purchase_price, w, cfg)
     supply_cap = retail_price * (1 - take)
     profit = supply_cap - landed
     margin = profit / supply_cap if supply_cap > 0 else 0.0

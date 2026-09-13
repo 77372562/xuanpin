@@ -154,3 +154,75 @@ def build_summary(results, cfg):
 
     wb.save(path)
     return path
+
+
+SUPPLY_HEADERS = ["状态", "建议", "原因", "商品标题", "录入拿货价(¥)", "采购现价(¥)", "价格变化",
+                  "供货价(¥)", "录入时利润(¥)", "当前利润(¥)", "当前利润率", "重量(g)",
+                  "最近采集", "商品链接"]
+SUPPLY_WIDTHS = [9, 15, 34, 36, 12, 11, 9, 10, 12, 11, 10, 8, 11, 14]
+SUGGESTION_COLOR = {"建议下架(停供)": "C00000", "建议换源/停供": "C00000",
+                    "谨慎持有": "B26A00", "信息过期": "7030A0", "建议加量/续报": "1A7F45"}
+
+
+def build_supply_report(rows, cfg):
+    """供货监控报告: 每个在供商品的最新采购价、利润和上下架建议"""
+    from xuanpin.supply import _thresholds
+    ts = datetime.now().strftime("%Y%m%d_%H%M")
+    path = REPORTS_DIR / f"供货监控报告_{ts}.xlsx"
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "供货监控"
+    ws.append(SUPPLY_HEADERS)
+    for c in ws[1]:
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = PatternFill("solid", fgColor="2E5E4E")
+
+    red = Font(color="C00000")
+    for r in sorted(rows, key=lambda x: x["suggestion"]):
+        chg = r.get("price_change")
+        ws.append(["在供" if r.get("active") else "已停供", r["suggestion"],
+                   r.get("reasons") or "", r.get("title"), r.get("purchase_price"),
+                   r.get("purchase_now"), chg, r.get("supply_price"),
+                   r.get("profit_entry"), r.get("profit_now"), r.get("ratio_now"),
+                   r.get("weight_g"), (r.get("captured_at") or "")[:10], r.get("url")])
+        ri = ws.max_row
+        sug = ws.cell(row=ri, column=2)
+        color = SUGGESTION_COLOR.get(r["suggestion"])
+        if color:
+            sug.font = Font(color=color, bold=True)
+        for col in (5, 6, 8, 9, 10):
+            ws.cell(row=ri, column=col).number_format = "0.00"
+        c7 = ws.cell(row=ri, column=7)
+        c7.number_format = "+0.0%;-0.0%"
+        if isinstance(chg, (int, float)) and chg > 0:
+            c7.font = red
+        c11 = ws.cell(row=ri, column=11)
+        c11.number_format = "0.0%"
+        if isinstance(c11.value, (int, float)) and c11.value < 0.10:
+            c11.font = red
+        link = ws.cell(row=ri, column=14)
+        if r.get("url"):
+            link.hyperlink = r["url"]
+            link.font = Font(color="0563C1", underline="single")
+
+    for i, w in enumerate(SUPPLY_WIDTHS, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = ws.dimensions
+
+    ts2 = wb.create_sheet("口径说明")
+    t = _thresholds(cfg)
+    for k, v in [("生成时间", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+                 ("下架线", f"利润率≤{t['min_ratio_stop']*100:.0f}% 或亏本 → 建议下架(停供)"),
+                 ("谨慎线", f"利润率<{t['min_ratio_warn']*100:.0f}% → 核价空间不足"),
+                 ("加量线", f"利润率≥{t['boost_ratio']*100:.0f}%且成本降{t['boost_drop']*100:.0f}% → 建议加量/续报"),
+                 ("断供判定", f"超过{t['stale_days']}天没采集到货源价格 → 提示换源"),
+                 ("当前利润", "供货价 - (最新采购价+包装+送仓+超重)"),
+                 ("提示", "Temu全托管由平台控制上架, 建议需人工到商家后台执行: 停止供货/调整报价")]:
+        ts2.append([k, v])
+    ts2.column_dimensions["A"].width = 14
+    ts2.column_dimensions["B"].width = 90
+
+    wb.save(path)
+    return path

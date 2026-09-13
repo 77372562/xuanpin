@@ -226,6 +226,73 @@ def api_open_folder():
         return jsonify(ok=False, error=str(e)), 500
 
 
+# ---------------- 供货管理(上下架建议) ----------------
+
+@app.get("/api/supplies")
+def api_supplies():
+    from xuanpin import supply
+    rows = supply.analyze(load_cfg())
+    return jsonify(items=rows)
+
+
+@app.post("/api/supplies")
+def api_supplies_add():
+    from xuanpin import db as _db
+    d = request.get_json(force=True) or {}
+    title = str(d.get("title", "")).strip()
+    supply_price = d.get("supply_price")
+    if not title:
+        return jsonify(ok=False, error="请填商品标题/备注"), 400
+    if not supply_price or float(supply_price) <= 0:
+        return jsonify(ok=False, error="请填你的Temu供货价(核价/报价)"), 400
+    purchase = d.get("purchase_price")
+    if not purchase or float(purchase) <= 0:
+        return jsonify(ok=False, error="请填拿货价(1688采购价)"), 400
+    sid = _db.add_supply(
+        title=title,
+        url=str(d.get("url") or "").strip() or None,
+        purchase_price=float(purchase),
+        supply_price=float(supply_price),
+        retail_ref=float(d["retail_ref"]) if d.get("retail_ref") else None,
+        weight_g=float(d["weight_g"]) if d.get("weight_g") else None,
+        product_id=int(d["product_id"]) if d.get("product_id") else None,
+        note=d.get("note"),
+    )
+    return jsonify(ok=True, id=sid)
+
+
+@app.post("/api/supplies/<int:sid>/toggle")
+def api_supply_toggle(sid):
+    from xuanpin import db as _db
+    row = next((s for s in _db.list_supplies() if s["id"] == sid), None)
+    if not row:
+        return jsonify(ok=False, error="不存在"), 404
+    _db.set_supply_active(sid, not row["active"])
+    return jsonify(ok=True, active=not row["active"])
+
+
+@app.delete("/api/supplies/<int:sid>")
+def api_supply_delete(sid):
+    from xuanpin import db as _db
+    _db.delete_supply(sid)
+    return jsonify(ok=True)
+
+
+@app.get("/api/products/recent")
+def api_products_recent():
+    from xuanpin import db as _db
+    return jsonify(items=_db.recent_products(30))
+
+
+@app.post("/api/supply_report")
+def api_supply_report():
+    from xuanpin import supply
+    path = supply.monitor_and_report(load_cfg())
+    if path is None:
+        return jsonify(ok=False, error="还没有登记任何在供商品"), 400
+    return jsonify(ok=True, name=Path(path).name)
+
+
 # ---------------- 前端页面 ----------------
 
 PAGE = """<!DOCTYPE html>
@@ -317,6 +384,27 @@ PAGE = """<!DOCTYPE html>
     </table>
     <div class="hint" id="sumline"></div>
   </div>
+
+  <div class="card">
+    <h2>⑤ 供货管理（自动上下架建议）</h2>
+    <div class="inline" style="margin-bottom:10px">
+      <select id="impProd" style="max-width:340px; padding:6px; border:1px solid #d8dce6; border-radius:6px" onchange="fillFromProduct()"></select>
+      <span class="hint">从最近采集选品自动填入, 或直接手填 ↓</span>
+    </div>
+    <div class="inline">
+      <input id="supTitle" class="kw" placeholder="商品标题/备注" style="width:200px">
+      <input id="supPurchase" class="num" type="number" step="0.1" placeholder="拿货价¥">
+      <input id="supSupply" class="num" type="number" step="0.1" placeholder="供货价¥">
+      <input id="supWeight" class="num" type="number" step="10" placeholder="重量g">
+      <button class="green" onclick="addSupply()">登记在供</button>
+      <button class="ghost" onclick="genSupplyReport()">生成供货监控报告</button>
+    </div>
+    <table style="margin-top:10px">
+      <thead><tr><th>商品</th><th>拿货价→现价</th><th>供货价</th><th>当前利润</th><th>建议</th><th>操作</th></tr></thead>
+      <tbody id="supbody"></tbody>
+    </table>
+    <div class="hint">登记你已报价/在供的商品后, 每次跑工作流会自动比对1688最新采购价: 涨价→建议下架(停供), 降价→建议加量, 断货→建议换源。Temu全托管的上下架由平台控制, 建议需到商家后台人工执行。</div>
+  </div>
 </div>
 <div class="toast" id="toast"></div>
 
@@ -390,6 +478,83 @@ async function cancelJob(){
 
 async function openFolder(){ await fetch('/api/open_folder', {method:'POST'}); }
 
+// ---------- 供货管理 ----------
+let recentProds = [];
+
+async function loadRecent(){
+  const r = await fetch('/api/products/recent'); const d = await r.json();
+  recentProds = d.items || [];
+  const sel = $('impProd');
+  sel.innerHTML = '<option value="">— 从最近采集导入 —</option>';
+  recentProds.forEach((p, i) => {
+    const o = document.createElement('option');
+    o.value = i;
+    o.textContent = (p.title||'').slice(0,30) + ' [¥' + (p.price_min??'?') + '~' + (p.price_max??'?') + ']';
+    sel.appendChild(o);
+  });
+}
+
+function fillFromProduct(){
+  const i = $('impProd').value;
+  if (i === '') return;
+  const p = recentProds[i];
+  $('supTitle').value = (p.title||'').slice(0,60);
+  $('supPurchase').value = p.price_min ?? '';
+  $('supWeight').value = '';
+  $('impProd')._pid = p.id;
+  $('impProd')._url = p.url || '';
+}
+
+async function addSupply(){
+  const body = {
+    title: $('supTitle').value.trim(),
+    purchase_price: $('supPurchase').value,
+    supply_price: $('supSupply').value,
+    weight_g: $('supWeight').value || null,
+    product_id: $('impProd')._pid || null,
+    url: $('impProd')._url || '',
+  };
+  const r = await fetch('/api/supplies', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  const d = await r.json();
+  if (d.ok){ toast('已登记在供商品 ✓'); $('supTitle').value=''; $('supPurchase').value=''; $('supSupply').value=''; loadSupplies(); }
+  else toast(d.error);
+}
+
+const SUG_COLOR = {'建议下架(停供)':'#c0392b','建议换源/停供':'#c0392b','谨慎持有':'#b26a00','信息过期':'#7030a0','建议加量/续报':'#1a7f45','继续供货':'#1a7f45','已停供':'#9aa1b2','待完善':'#9aa1b2'};
+
+async function loadSupplies(){
+  const r = await fetch('/api/supplies'); const d = await r.json();
+  const tb = $('supbody'); tb.innerHTML = '';
+  (d.items||[]).forEach(s => {
+    const tr = document.createElement('tr');
+    function td(txt){ const t=document.createElement('td'); t.textContent=txt; return t; }
+    tr.appendChild(td((s.title||'').slice(0,24)));
+    tr.appendChild(td('¥' + (s.purchase_price??'?') + ' → ¥' + (s.purchase_now??'?')));
+    tr.appendChild(td('¥' + (s.supply_price??'?')));
+    const pt = td((s.profit_now>=0?'+':'') + (s.profit_now??'?') + ' (' + ((s.ratio_now||0)*100).toFixed(1) + '%)');
+    if (s.profit_now < 0) pt.style.color = '#c0392b';
+    tr.appendChild(pt);
+    const sug = td(s.suggestion + (s.reasons? '：'+s.reasons : ''));
+    sug.style.color = SUG_COLOR[s.suggestion] || '#1f2430';
+    if (s.active) sug.style.fontWeight = '600';
+    tr.appendChild(sug);
+    const op = document.createElement('td');
+    const tg = document.createElement('button'); tg.className='ghost'; tg.textContent = s.active?'停供':'启用';
+    tg.onclick = async()=>{ await fetch('/api/supplies/'+s.id+'/toggle', {method:'POST'}); loadSupplies(); };
+    const dl = document.createElement('button'); dl.className='ghost'; dl.textContent='删'; dl.style.marginLeft='6px';
+    dl.onclick = async()=>{ await fetch('/api/supplies/'+s.id, {method:'DELETE'}); loadSupplies(); };
+    op.appendChild(tg); op.appendChild(dl); tr.appendChild(op);
+    tb.appendChild(tr);
+  });
+  if (!(d.items||[]).length) tb.innerHTML = '<tr><td colspan=6 style="color:#9aa1b2">还没有登记在供商品 — 跑完选品后, 把决定报价的品登记到这里</td></tr>';
+}
+
+async function genSupplyReport(){
+  const r = await fetch('/api/supply_report', {method:'POST'});
+  const d = await r.json();
+  if (d.ok){ toast('供货监控报告已生成'); refreshReports(); } else toast(d.error);
+}
+
 function esc(s){ const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
 async function refreshReports(){
@@ -419,7 +584,7 @@ async function poll(){
       el.scrollTop = el.scrollHeight;
     }
     if (running && !s.running){
-      running = false; setButtons(); refreshReports();
+      running = false; setButtons(); refreshReports(); loadSupplies();
       if (s.error){ $('log').innerHTML += '\\n<span class=err>[失败] ' + esc(s.error) + '</span>'; toast('任务失败: ' + s.error); }
       else toast('任务完成 ✓');
     }
@@ -428,7 +593,7 @@ async function poll(){
   } catch(e) {}
 }
 
-loadKeywords(); refreshReports(); setButtons();
+loadKeywords(); refreshReports(); loadSupplies(); loadRecent(); setButtons();
 setInterval(poll, 1200); setInterval(refreshReports, 6000);
 </script>
 </body>

@@ -39,6 +39,19 @@ CREATE TABLE IF NOT EXISTS runs (
     report_path TEXT,
     created_at TEXT DEFAULT (datetime('now','localtime'))
 );
+CREATE TABLE IF NOT EXISTS my_supplies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id INTEGER,
+    title TEXT,
+    url TEXT,
+    purchase_price REAL,
+    supply_price REAL,
+    retail_ref REAL,
+    weight_g REAL,
+    active INTEGER DEFAULT 1,
+    note TEXT,
+    created_at TEXT DEFAULT (datetime('now','localtime'))
+);
 """
 
 
@@ -95,3 +108,58 @@ def save_run(keyword, target_price, report_path):
     )
     con.commit()
     con.close()
+
+
+# ---------- 供货管理(上下架建议) ----------
+
+def add_supply(title, url, purchase_price, supply_price, retail_ref=None,
+               weight_g=None, product_id=None, note=None):
+    con = connect()
+    cur = con.execute(
+        """INSERT INTO my_supplies(title, url, purchase_price, supply_price,
+           retail_ref, weight_g, product_id, note) VALUES (?,?,?,?,?,?,?,?)""",
+        (title, url, purchase_price, supply_price, retail_ref, weight_g,
+         product_id, note),
+    )
+    con.commit()
+    sid = cur.lastrowid
+    con.close()
+    return sid
+
+
+def set_supply_active(sid, active):
+    con = connect()
+    con.execute("UPDATE my_supplies SET active=? WHERE id=?", (1 if active else 0, sid))
+    con.commit()
+    con.close()
+
+
+def delete_supply(sid):
+    con = connect()
+    con.execute("DELETE FROM my_supplies WHERE id=?", (sid,))
+    con.commit()
+    con.close()
+
+
+def list_supplies(active_only=False):
+    con = connect()
+    sql = "SELECT * FROM my_supplies"
+    if active_only:
+        sql += " WHERE active=1"
+    sql += " ORDER BY id DESC"
+    cols = [c[0] for c in con.execute(sql).description]
+    rows = [dict(zip(cols, r)) for r in con.execute(sql).fetchall()]
+    con.close()
+    return rows
+
+
+def recent_products(limit=30):
+    con = connect()
+    cols = [c[0] for c in con.execute(
+        "SELECT id,title,url,price_min,price_max,keyword FROM products "
+        "ORDER BY id DESC LIMIT ?", (limit,)).description]
+    rows = [dict(zip(cols, r)) for r in con.execute(
+        "SELECT id,title,url,price_min,price_max,keyword FROM products "
+        "ORDER BY id DESC LIMIT ?", (limit,)).fetchall()]
+    con.close()
+    return rows

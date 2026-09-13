@@ -183,4 +183,11 @@ def run_batch(cfg, list_file="keywords.txt", demo=False, top_n=3,
     ok = [r for r in results if r["rows"]]
     print(f">> 工作流完成: {len(ok)}/{len(results)} 个品有结果")
     print(f">> 汇总报告: {summary_path}")
+
+    if not demo:
+        try:
+            from xuanpin import supply
+            supply.monitor_and_report(cfg)
+        except Exception as e:
+            print(f"[供货监控跳过] {type(e).__name__}: {e}")
     return summary_path, results

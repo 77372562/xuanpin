@@ -11,6 +11,14 @@ costing:
 fees:
   platform_take: 0.5
 
+# 供货监控(自动上下架建议)阈值
+supply:
+  min_ratio_stop: 0.03   # 当前利润率≤3%或亏本 → 建议下架(停供)
+  min_ratio_warn: 0.10   # 利润率<10% → 谨慎(核价空间不足)
+  boost_ratio: 0.30      # 利润率≥30% 且成本明显下降 → 建议加量/续报
+  boost_drop: 0.15       # 成本下降15%算明显
+  stale_days: 14         # N天没采集到货源价格 → 提示可能断供
+
 search:
   max_pages: 2              # 每次采集的搜索页数(每页约40个商品)
   wait_results_sec: 150     # 等结果/等人工登录的最长秒数
