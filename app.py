@@ -436,6 +436,23 @@ setInterval(poll, 1200); setInterval(refreshReports, 6000);
 
 
 if __name__ == "__main__":
+    import socket
+    import webbrowser
+
     REPORTS_DIR.mkdir(exist_ok=True)
-    print(f"选品助手界面已启动: http://127.0.0.1:{PORT}  (保持本窗口开着, 关闭即退出)")
+    url = f"http://127.0.0.1:{PORT}"
+
+    s = socket.socket()
+    s.settimeout(0.5)
+    port_busy = s.connect_ex(("127.0.0.1", PORT)) == 0
+    s.close()
+
+    if port_busy:
+        print(f"界面已经在运行, 直接打开浏览器: {url}")
+        webbrowser.open(url)
+        sys.exit(0)
+
+    # 服务真正开始监听后再开浏览器, 避免打开太早报"无法访问"
+    threading.Timer(1.5, lambda: webbrowser.open(url)).start()
+    print(f"选品助手界面: {url}  (保持本窗口开着, 关闭即退出)")
     app.run(host="127.0.0.1", port=PORT, threaded=True)
