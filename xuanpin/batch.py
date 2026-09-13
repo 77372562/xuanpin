@@ -43,24 +43,86 @@ def parse_keywords_file(path):
     return entries
 
 
-def fill_missing_retail(entries):
-    """清单里没写零售价的, 运行时逐个询问"""
-    for e in entries:
-        if e["retail"] is None:
-            while True:
-                s = input(f"  [{e['keyword']}] 在Temu上的零售价(¥): ").strip()
-                try:
-                    v = float(s)
-                    if v > 0:
-                        e["retail"] = v
-                        break
-                except ValueError:
-                    pass
-                print("  输入无效, 请输入正数, 例如 15.9")
+def fill_missing_retail(entries, interactive=True):
+    """清单里没写零售价的: 命令行模式逐个询问; 界面模式直接报错提示补齐"""
+    missing = [e for e in entries if e["retail"] is None]
+    if not missing:
+        return entries
+    if not interactive:
+        names = ", ".join(e["keyword"] for e in missing)
+        raise ValueError(f"以下候选品没填Temu零售价, 请先在清单里补齐: {names}")
+    for e in missing:
+        while True:
+            s = input(f"  [{e['keyword']}] 在Temu上的零售价(¥): ").strip()
+            try:
+                v = float(s)
+                if v > 0:
+                    e["retail"] = v
+                    break
+            except ValueError:
+                pass
+            print("  输入无效, 请输入正数, 例如 15.9")
     return entries
 
 
-def run_batch(cfg, list_file="keywords.txt", demo=False, top_n=3):
+def single_search(cfg, keyword, retail, weight=None, pages=None):
+    """单品快查: 采集+核算+出报告, 返回报告路径"""
+    from xuanpin import report
+    from xuanpin.collector1688 import Collector
+
+    pages = pages or cfg["search"]["max_pages"]
+    c = Collector(wait_sec=cfg["search"]["wait_results_sec"])
+    c.__enter__()
+    try:
+        if not c.logged_in():
+            if not c.login_flow():
+                raise SystemExit("登录失败/超时, 请重新执行登录")
+        items = c.search(keyword, pages=pages)
+    finally:
+        c.__exit__()
+
+    if not items:
+        print("!! 未采集到商品: 可能是登录过期/滑块验证/页面改版, "
+              "把 data/debug/ 下的文件发给维护者即可修复")
+        return None
+    db.save_products(keyword, items)
+    rows = build_rows_local(items, retail, weight, cfg)
+    print(f">> 采集入库 {len(items)} 个商品, 其中 {len(rows)} 个可核算")
+    path = report.build(keyword, retail, rows, cfg)
+    db.save_run(keyword, retail, str(path))
+    for i, r in enumerate(sorted(rows, key=lambda x: x["profit_low"], reverse=True)[:5], 1):
+        fl = " 【" + "; ".join(r["flags"]) + "】" if r["flags"] else ""
+        print(f"{i:>2}. 保守利润 {r['profit_low']:+8.2f}元 | 利润率 {r['margin_low']*100:5.1f}% "
+              f"| {r['title'][:36]}{fl}")
+    print(f">> 报告: {path}")
+    return path
+
+
+def build_rows_local(items, retail, weight_override, cfg):
+    """与main.build_rows一致的行构造, 避免循环导入"""
+    from xuanpin import costing, risk
+    from datetime import datetime as _dt
+    rows = []
+    now = _dt.now().strftime("%Y-%m-%d %H:%M")
+    for it in items:
+        pmn, pmx = it.get("price_min"), it.get("price_max")
+        if pmn is None and pmx is None:
+            continue
+        pmn = pmn if pmn is not None else pmx
+        pmx = pmx if pmx is not None else pmn
+        w = weight_override or it.get("weight_g")
+        est_low = costing.estimate(pmx, w, retail, cfg)
+        est_high = costing.estimate(pmn, w, retail, cfg)
+        rows.append({**it, "weight_g": est_low["weight_g"], "landed": est_low["landed"],
+                     "supply_cap": est_low["supply_cap"], "profit_low": est_low["profit"],
+                     "profit_high": est_high["profit"], "margin_low": est_low["margin"],
+                     "flags": risk.flags_for(it.get("title") or "", cfg["risk"]),
+                     "captured_at": now})
+    return rows
+
+
+def run_batch(cfg, list_file="keywords.txt", demo=False, top_n=3,
+              interactive=True, cancel_check=None):
     """执行批量工作流, 返回 (汇总报告路径, entries)"""
     from xuanpin import report
     from xuanpin.mock import MOCK_ITEMS
@@ -68,7 +130,7 @@ def run_batch(cfg, list_file="keywords.txt", demo=False, top_n=3):
     entries = parse_keywords_file(list_file)
     if not entries:
         raise ValueError(f"清单里没有候选品, 请先编辑 {list_file}")
-    fill_missing_retail(entries)
+    fill_missing_retail(entries, interactive=interactive)
     print(f"\n>> 共 {len(entries)} 个候选品, 开始工作流…\n")
 
     collector = None
@@ -79,11 +141,14 @@ def run_batch(cfg, list_file="keywords.txt", demo=False, top_n=3):
         if not collector.logged_in():
             if not collector.login_flow():
                 collector.__exit__()
-                raise SystemExit("登录失败, 请重跑 python main.py login")
+                raise SystemExit("登录失败, 请重跑登录")
 
     results = []
     try:
         for i, e in enumerate(entries, 1):
+            if cancel_check and cancel_check():
+                print(">> 收到停止指令, 中止剩余关键词")
+                break
             kw, retail = e["keyword"], e["retail"]
             print(f"===== [{i}/{len(entries)}] {kw} (对标零售价 {retail}元) =====")
             if demo:
@@ -97,8 +162,7 @@ def run_batch(cfg, list_file="keywords.txt", demo=False, top_n=3):
                 results.append({**e, "rows": [], "per_report": None})
                 continue
 
-            from main import build_rows
-            rows = build_rows(items, retail, e["weight"], cfg)
+            rows = build_rows_local(items, retail, e["weight"], cfg)
             per_path = None
             if not demo:
                 per_path = report.build(kw, retail, rows, cfg)

@@ -34,29 +34,8 @@ def load_cfg():
 
 
 def build_rows(items, retail, weight_override, cfg):
-    rows = []
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    for it in items:
-        pmn, pmx = it.get("price_min"), it.get("price_max")
-        if pmn is None and pmx is None:
-            continue  # 没有价格的无法核算, 跳过(库里仍保留)
-        pmn = pmn if pmn is not None else pmx
-        pmx = pmx if pmx is not None else pmn
-        w = weight_override or it.get("weight_g")
-        est_low = costing.estimate(pmx, w, retail, cfg)    # 保守: 采购取高价
-        est_high = costing.estimate(pmn, w, retail, cfg)   # 乐观: 采购取低价
-        rows.append({
-            **it,
-            "weight_g": est_low["weight_g"],
-            "landed": est_low["landed"],
-            "supply_cap": est_low["supply_cap"],
-            "profit_low": est_low["profit"],
-            "profit_high": est_high["profit"],
-            "margin_low": est_low["margin"],
-            "flags": risk.flags_for(it.get("title") or "", cfg["risk"]),
-            "captured_at": now,
-        })
-    return rows
+    from xuanpin.batch import build_rows_local
+    return build_rows_local(items, retail, weight_override, cfg)
 
 
 def print_top(rows, n):

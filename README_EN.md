@@ -53,7 +53,19 @@ python main.py search "mug" --retail 19.9 --weight 350 --pages 3
 python main.py test
 ```
 
-### ⚡ One-click daily workflow (recommended)
+### 🖱️ Web UI (no command line, recommended)
+
+Double-click **`选品界面.bat`** — a browser page opens with:
+
+- **Candidate list**: add/edit/remove keywords (keyword + Temu retail price + optional weight) in a table
+- **One-click batch workflow** / **quick single-product lookup** without touching the list
+- **Live logs**: scraping progress and TOP rankings stream on the page
+- **Reports**: download every Excel from the page, or open the reports folder directly
+- Login is a button too (scan the QR in the popup browser)
+
+All command-line commands still work (`login` / `search` / `batch` / `test`).
+
+### ⚡ CLI batch workflow
 
 Skip typing commands every day:
 
@@ -124,6 +136,7 @@ xuanpin/
 - [ ] Auto-scrape unit weight & MOQ tiers from product detail pages
 - [ ] Auto-compare Temu listing prices (replace manual --retail)
 - [x] Batch keyword runs + combined summary sheet (`python main.py batch` / double-click `每日选品.bat`)
+- [x] Local web UI (double-click `选品界面.bat`: browser operation + live logs + report downloads)
 - [ ] Scheduled runs + new-product / price-change alerts
 
 ## ⚠️ Disclaimer
