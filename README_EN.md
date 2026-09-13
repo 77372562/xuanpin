@@ -53,6 +53,24 @@ python main.py search "mug" --retail 19.9 --weight 350 --pages 3
 python main.py test
 ```
 
+### ⚡ One-click daily workflow (recommended)
+
+Skip typing commands every day:
+
+1. Open `keywords.txt` in Notepad and list your candidate products (one per line), e.g.:
+
+   ```
+   # keyword,TemuRetailPrice,weightGrams(optional)
+   沥水篮,15.9
+   马克杯,19.9,350
+   ```
+
+2. **Double-click `每日选品.bat`** — the script checks login, scrapes & costs every keyword, and produces one independent report per keyword plus a **combined summary workbook** ranking all candidates by conservative profit.
+
+3. Open the summary, scan from the top: positive profit, no risk flags, affordable MOQ.
+
+Keywords without a price will prompt you at runtime. Point Windows Task Scheduler at the .bat file for a fully automated daily report.
+
 ## 📈 How profit is calculated
 
 ```
@@ -105,7 +123,7 @@ xuanpin/
 
 - [ ] Auto-scrape unit weight & MOQ tiers from product detail pages
 - [ ] Auto-compare Temu listing prices (replace manual --retail)
-- [ ] Batch keyword runs + combined summary sheet
+- [x] Batch keyword runs + combined summary sheet (`python main.py batch` / double-click `每日选品.bat`)
 - [ ] Scheduled runs + new-product / price-change alerts
 
 ## ⚠️ Disclaimer
