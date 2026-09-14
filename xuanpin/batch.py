@@ -98,7 +98,7 @@ def single_search(cfg, keyword, retail, weight=None, pages=None):
     return path
 
 
-def build_rows_local(items, retail, weight_override, cfg):
+def build_rows_local(items, retail, weight_override, cfg, retail_source="人工"):
     """与main.build_rows一致的行构造, 避免循环导入"""
     from xuanpin import costing, risk
     from datetime import datetime as _dt
@@ -117,6 +117,7 @@ def build_rows_local(items, retail, weight_override, cfg):
                      "supply_cap": est_low["supply_cap"], "profit_low": est_low["profit"],
                      "profit_high": est_high["profit"], "margin_low": est_low["margin"],
                      "flags": risk.flags_for(it.get("title") or "", cfg["risk"]),
+                     "retail_source": retail_source,
                      "captured_at": now})
     return rows
 
@@ -124,13 +125,43 @@ def build_rows_local(items, retail, weight_override, cfg):
 def run_batch(cfg, list_file="keywords.txt", demo=False, top_n=3,
               interactive=True, cancel_check=None):
     """执行批量工作流, 返回 (汇总报告路径, entries)"""
+    import random
+    import re
+    import time as _time
+
     from xuanpin import report
     from xuanpin.mock import MOCK_ITEMS
 
     entries = parse_keywords_file(list_file)
     if not entries:
         raise ValueError(f"清单里没有候选品, 请先编辑 {list_file}")
-    fill_missing_retail(entries, interactive=interactive)
+
+    # 缺零售价的先尝试Temu自动比价(需要代理, 失败不阻塞)
+    temu_cfg = cfg.get("temu", {}) or {}
+    missing = [e for e in entries if e["retail"] is None]
+    if missing and temu_cfg.get("enabled", True) and not demo:
+        print(f">> {len(missing)} 个品没填Temu零售价, 尝试自动比价…")
+        from xuanpin import temu_compare
+        for e in missing:
+            res = temu_compare.compare(e["keyword"], cfg)
+            if res.get("ok"):
+                e["retail"] = temu_compare.suggest_retail(res)
+                e["retail_source"] = f"自动:Temu中位${res['median']}(N={res['count']})"
+                print(f"  [{e['keyword']}] ${res['min']}~${res['max']} 中位${res['median']}"
+                      f" → 参考零售价 ¥{e['retail']}")
+            else:
+                e["retail_source"] = "自动比价失败"
+                print(f"  [{e['keyword']}] 比价失败: {res['note']}")
+
+    still = [e for e in entries if e["retail"] is None]
+    if still:
+        if interactive:
+            fill_missing_retail(entries, interactive=True)
+        else:
+            print("!! 以下品仍无零售价, 本次跳过: " + ", ".join(e["keyword"] for e in still))
+            entries = [e for e in entries if e["retail"] is not None]
+    if not entries:
+        raise ValueError("没有任何可跑的候选品(全部缺Temu零售价)")
     print(f"\n>> 共 {len(entries)} 个候选品, 开始工作流…\n")
 
     collector = None
@@ -143,6 +174,7 @@ def run_batch(cfg, list_file="keywords.txt", demo=False, top_n=3,
                 collector.__exit__()
                 raise SystemExit("登录失败, 请重跑登录")
 
+    enrich_n = int((cfg.get("enrich", {}) or {}).get("top_n", 5))
     results = []
     try:
         for i, e in enumerate(entries, 1):
@@ -162,7 +194,29 @@ def run_batch(cfg, list_file="keywords.txt", demo=False, top_n=3,
                 results.append({**e, "rows": [], "per_report": None})
                 continue
 
-            rows = build_rows_local(items, retail, e["weight"], cfg)
+            # 详情页增强: 采购价最低的TOP N进详情页抓真实重量/起订量
+            if not demo and enrich_n > 0 and collector is not None:
+                cand = sorted([it for it in items if it.get("price_min")],
+                              key=lambda x: x["price_min"])[:enrich_n]
+                for it in cand:
+                    m = re.search(r"offer/(\d+)\.html", it.get("url") or "")
+                    if not m:
+                        continue
+                    try:
+                        info = collector.detail(m.group(1))
+                        if info.get("weight_g") or info.get("moq"):
+                            it["weight_g"] = info.get("weight_g") or it.get("weight_g")
+                            it["moq"] = info.get("moq") or it.get("moq")
+                            db.update_product_enrichment(
+                                it["url"], info.get("weight_g"), info.get("moq"))
+                            print(f"  [详情增强] {it['title'][:20]}: "
+                                  f"{info.get('weight_g') or '?'}g / 起批{info.get('moq') or '?'}件")
+                    except Exception as ex:
+                        print(f"  [详情增强失败] {type(ex).__name__}, 跳过")
+                    _time.sleep(random.uniform(1.0, 2.0))
+
+            rows = build_rows_local(items, retail, e["weight"], cfg,
+                                    retail_source=e.get("retail_source", "人工"))
             per_path = None
             if not demo:
                 per_path = report.build(kw, retail, rows, cfg)

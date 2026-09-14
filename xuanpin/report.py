@@ -9,10 +9,10 @@ from xuanpin.paths import REPORTS_DIR
 
 HEADERS = ["排名", "商品标题", "商品链接", "批发价低(¥)", "批发价高(¥)", "起订量",
            "销量线索", "重量(g,估)", "落地成本(¥)", "供货价上限(¥)",
-           "保守利润(¥)", "乐观利润(¥)", "保守利润率", "风险标记", "采集时间"]
+           "保守利润(¥)", "乐观利润(¥)", "保守利润率", "风险标记", "采集时间", "零售价来源"]
 
 # 保守利润 = 按批发价高值算; 乐观利润 = 按批发价低值算
-COL_WIDTHS = [5, 42, 12, 11, 11, 8, 13, 10, 11, 13, 11, 11, 11, 30, 17]
+COL_WIDTHS = [5, 42, 12, 11, 11, 8, 13, 10, 11, 13, 11, 11, 11, 30, 17, 22]
 MONEY_COLS = [4, 5, 9, 10]
 PROFIT_COLS = [11, 12]
 PCT_COLS = [13]
@@ -42,7 +42,8 @@ def build(keyword, retail_price, rows, cfg):
         ws.append([i, r.get("title"), r.get("url"), r.get("price_min"), r.get("price_max"),
                    r.get("moq"), r.get("sales_text"), r.get("weight_g"), r.get("landed"),
                    r.get("supply_cap"), r.get("profit_low"), r.get("profit_high"),
-                   r.get("margin_low"), "; ".join(r.get("flags", [])), r.get("captured_at")])
+                   r.get("margin_low"), "; ".join(r.get("flags", [])), r.get("captured_at"),
+                   r.get("retail_source", "人工")])
         ri = ws.max_row
         link = ws.cell(row=ri, column=3)
         if r.get("url"):
@@ -92,8 +93,8 @@ def build(keyword, retail_price, rows, cfg):
 
 SUMMARY_HEADERS = ["关键词", "对标零售价(¥)", "排名", "商品标题", "批发价低(¥)", "批发价高(¥)",
                    "起订量", "销量线索", "重量(g,估)", "落地成本(¥)", "供货价上限(¥)",
-                   "保守利润(¥)", "乐观利润(¥)", "保守利润率", "风险标记", "采集时间"]
-SUMMARY_WIDTHS = [12, 12, 5, 40, 10, 10, 7, 12, 9, 10, 12, 10, 10, 10, 26, 16]
+                   "保守利润(¥)", "乐观利润(¥)", "保守利润率", "风险标记", "采集时间", "零售价来源"]
+SUMMARY_WIDTHS = [12, 12, 5, 40, 10, 10, 7, 12, 9, 10, 12, 10, 10, 10, 26, 16, 22]
 
 
 def build_summary(results, cfg):
@@ -120,7 +121,8 @@ def build_summary(results, cfg):
         ws.append([kw, retail, i, r.get("title"), r.get("price_min"), r.get("price_max"),
                    r.get("moq"), r.get("sales_text"), r.get("weight_g"), r.get("landed"),
                    r.get("supply_cap"), r.get("profit_low"), r.get("profit_high"),
-                   r.get("margin_low"), "; ".join(r.get("flags", [])), r.get("captured_at")])
+                   r.get("margin_low"), "; ".join(r.get("flags", [])), r.get("captured_at"),
+                   r.get("retail_source", "人工")])
         ri = ws.max_row
         for col in (5, 6, 10, 11):
             ws.cell(row=ri, column=col).number_format = "0.00"

@@ -114,6 +114,14 @@ python main.py test
 | `search.max_pages` | 每次采集页数 | 2 |
 | `risk.brand_words` | 品牌侵权词库 | 迪士尼/宝可梦等 |
 | `risk.cert_rules` | 需认证品类规则 | 玩具/电子/母婴等 |
+| `enrich.top_n` | 每个关键词自动进详情页抓重量/阶梯价的候选数 | 5 |
+| `temu.enabled` | 自动比价开关(清单缺零售价时搜Temu取参考价带) | true |
+| `temu.proxy` | 访问Temu的代理(留空自动读系统代理) | 空 |
+
+## 🙏 致谢（调研借鉴的开源项目）
+
+- [n1ceh4t/Temu-Item-Scraper](https://github.com/n1ceh4t/Temu-Item-Scraper) —— Temu 搜索页抓取技术思路（本项目已按 2026 年最新页面结构重写实现）
+- [IjalG/1688-Smart-Scraper](https://github.com/IjalG/1688-Smart-Scraper) / [xiayumu034-crypto/1688-Scraper-MCP](https://github.com/xiayumu034-crypto/1688-Scraper-MCP) —— 1688 采集方案调研参考
 
 ## 📁 目录结构
 
@@ -141,8 +149,8 @@ xuanpin/
 
 ## 🗺️ 路线图
 
-- [ ] 商品详情页自动抓取重量 / 起订量阶梯
-- [ ] Temu 在售价自动比对（替代人工填 --retail）
+- [x] 商品详情页自动抓取重量 / 起订量阶梯（对利润TOP候选自动增强）
+- [x] Temu 在售价自动比对（清单缺零售价时自动取价格带中位数，需代理，无代理自动跳过）
 - [x] 多关键词批量跑 + 汇总总表（`python main.py batch` / 双击 `每日选品.bat`）
 - [x] 本地图形界面（双击 `选品界面.bat`，浏览器操作 + 实时日志 + 报告下载）
 - [x] 供货监控 + 自动上下架建议（界面⑤区登记在供商品，工作流自动复检）

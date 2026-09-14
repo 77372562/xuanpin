@@ -420,6 +420,65 @@ class Collector:
                 continue
         return out
 
+    # ---------- 详情页增强: 重量/起订量阶梯 ----------
+
+    def detail(self, offer_id, timeout=30):
+        """打开商品详情页, 从mtop接口抓真实重量和价格阶梯; 失败返回尽力而为的dict"""
+        self._payloads = []
+        page = self.ctx.new_page()
+        try:
+            page.goto(f"https://detail.1688.com/offer/{offer_id}.html",
+                      wait_until="domcontentloaded", timeout=45000)
+            # 重量/阶梯价分属不同接口, 反复解析直到齐全或超时
+            t0 = time.time()
+            info = {}
+            while time.time() - t0 < timeout:
+                info = self._detail_from_json()
+                if info.get("weight_g") and info.get("tier_min") is not None:
+                    break
+                page.wait_for_timeout(1500)
+            if not info.get("moq"):
+                try:
+                    txt = page.inner_text("body")[:6000]
+                    m = re.search(r"(\d+)\s*件\s*起批", txt)
+                    if m:
+                        info["moq"] = int(m.group(1))
+                except Exception:
+                    pass
+            return info
+        finally:
+            page.close()
+
+    def _detail_from_json(self):
+        out = {"weight_g": None, "moq": None, "tier_min": None, "tier_max": None}
+        for text in self._payloads:
+            data = _loads_lenient(text)
+            if data is None:
+                continue
+            dicts = []
+            _walk(data, lambda x: isinstance(x, dict), dicts)
+            for d in dicts:
+                if out["weight_g"] is None and "unitWeight" in d:
+                    f = _f(d.get("unitWeight"))
+                    if f and 0.001 < f < 5000:
+                        # 1688详情重量单位为kg(小数), <100视为kg换算成克
+                        out["weight_g"] = round(f * 1000 if f < 100 else f, 1)
+                if out["tier_min"] is None and "minPrice" in d and "maxPrice" in d:
+                    lo, hi = _f(d.get("minPrice")), _f(d.get("maxPrice"))
+                    if lo and 0.01 < lo < 100000:
+                        out["tier_min"], out["tier_max"] = lo, hi or lo
+                        if out["moq"] is None:
+                            m = _f(d.get("beginAmount"))
+                            if m and m >= 1:
+                                out["moq"] = int(m)
+                if out["moq"] is None and ("beginAmount" in d or "begin_amount" in d):
+                    m = _f(d.get("beginAmount") or d.get("begin_amount"))
+                    if m and m >= 1:
+                        out["moq"] = int(m)
+                if all(out[k] is not None for k in ("weight_g", "moq", "tier_min")):
+                    return out
+        return out
+
     # ---------- 调试 ----------
 
     def _dump_debug(self, page, keyword, pno):

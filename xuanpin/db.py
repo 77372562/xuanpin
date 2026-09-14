@@ -164,3 +164,25 @@ def recent_products(limit=30):
         "ORDER BY id DESC LIMIT ?", (limit,)).fetchall()]
     con.close()
     return rows
+
+
+def product_id_by_url(url):
+    con = connect()
+    row = con.execute("SELECT id FROM products WHERE url=?", (url,)).fetchone()
+    con.close()
+    return row[0] if row else None
+
+
+def update_product_enrichment(url, weight_g=None, moq=None):
+    """详情页增强结果回写商品表"""
+    con = connect()
+    sets, vals = [], []
+    if weight_g is not None:
+        sets.append("weight_g=?"); vals.append(weight_g)
+    if moq is not None:
+        sets.append("moq=?"); vals.append(moq)
+    if sets:
+        vals.append(url)
+        con.execute(f"UPDATE products SET {', '.join(sets)} WHERE url=?", vals)
+        con.commit()
+    con.close()

@@ -134,8 +134,8 @@ xuanpin/
 
 ## 🗺️ Roadmap
 
-- [ ] Auto-scrape unit weight & MOQ tiers from product detail pages
-- [ ] Auto-compare Temu listing prices (replace manual --retail)
+- [x] Auto-scrape unit weight & MOQ tiers from product detail pages (top-N candidates per keyword)
+- [x] Auto-compare Temu listing prices (fetches price band when --retail missing; needs a proxy from mainland China, auto-skipped otherwise)
 - [x] Batch keyword runs + combined summary sheet (`python main.py batch` / double-click `每日选品.bat`)
 - [x] Local web UI (double-click `选品界面.bat`: browser operation + live logs + report downloads)
 - [x] Supply monitoring + auto delist/restock advice (register supplied products in UI section ⑤)

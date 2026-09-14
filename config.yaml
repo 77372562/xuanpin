@@ -19,6 +19,17 @@ supply:
   boost_drop: 0.15       # 成本下降15%算明显
   stale_days: 14         # N天没采集到货源价格 → 提示可能断供
 
+# 详情页增强: 对每个关键词利润TOP N的候选进详情页抓真实重量/阶梯价(每个约3~30秒)
+enrich:
+  top_n: 5
+
+# Temu自动比价: 清单里没填零售价的品, 自动搜Temu取价格带中位数作参考
+# 大陆直连Temu接口不通, 需要代理: 留空则自动读系统代理, 或填 http://127.0.0.1:7890
+temu:
+  enabled: true
+  proxy: ""
+  wait_sec: 30
+
 search:
   max_pages: 2              # 每次采集的搜索页数(每页约40个商品)
   wait_results_sec: 150     # 等结果/等人工登录的最长秒数
